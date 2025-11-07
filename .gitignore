@@ -27,9 +27,18 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.production
+.env.production.local
 
 # vercel
 .vercel
+
+# 诊断和测试文件
+imap_*.txt
+test-*.js
+add-env.js
+fix-env.ps1
+setup-env.ps1
 
 # typescript
 *.tsbuildinfo
