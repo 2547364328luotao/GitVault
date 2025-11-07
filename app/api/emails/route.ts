@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import Imap from 'imap';
+import { simpleParser } from 'mailparser';
 
 // IMAP 配置 - 生产环境应使用环境变量
 const IMAP_CONFIG = {
@@ -73,27 +74,51 @@ function fetchEmails(limit: number = 20): Promise<EmailMessage[]> {
         const end = totalMessages;
         totalToFetch = end - start + 1;
 
-        // 只获取邮件头部(高性能)
+        // 获取邮件头部和正文
         const fetch = imap.seq.fetch(`${start}:${end}`, {
-          bodies: ['HEADER.FIELDS (FROM TO SUBJECT DATE)'],
-          struct: false
+          bodies: ['HEADER', 'TEXT'],
+          struct: true
         });
 
         fetch.on('message', (msg: any, seqno: number) => {
-          msg.on('body', (stream: any) => {
+          let emailData: any = {
+            id: `${seqno}`,
+            headers: null,
+            body: null
+          };
+
+          msg.on('body', (stream: any, info: any) => {
             let buffer = '';
             stream.on('data', (chunk: any) => {
               buffer += chunk.toString('utf8');
             });
+            
             stream.once('end', () => {
-              const parsed = Imap.parseHeader(buffer);
+              if (info.which === 'HEADER') {
+                emailData.headers = Imap.parseHeader(buffer);
+              } else if (info.which === 'TEXT') {
+                emailData.body = buffer;
+              }
+            });
+          });
+
+          msg.once('end', async () => {
+            try {
+              // 使用 mailparser 解析完整邮件
+              const fullEmail = (emailData.headers ? 
+                Object.keys(emailData.headers).map(k => `${k}: ${emailData.headers[k].join(', ')}`).join('\r\n') 
+                : '') + '\r\n\r\n' + (emailData.body || '');
+              
+              const parsed = await simpleParser(fullEmail);
               
               const email: EmailMessage = {
-                id: `${seqno}`,
-                from: parsed.from?.[0] || '未知发件人',
-                subject: parsed.subject?.[0] || '(无主题)',
-                date: parsed.date ? new Date(parsed.date[0]) : new Date(),
-                snippet: parsed.subject?.[0]?.substring(0, 100) || ''
+                id: emailData.id,
+                from: parsed.from?.text || emailData.headers?.from?.[0] || '未知发件人',
+                subject: parsed.subject || emailData.headers?.subject?.[0] || '(无主题)',
+                date: parsed.date || (emailData.headers?.date ? new Date(emailData.headers.date[0]) : new Date()),
+                text: parsed.text || '',
+                html: parsed.html || '',
+                snippet: (parsed.text || parsed.subject || '').substring(0, 100)
               };
 
               emails.push(email);
@@ -109,7 +134,17 @@ function fetchEmails(limit: number = 20): Promise<EmailMessage[]> {
                 resolve(emails);
                 imap.end();
               }
-            });
+            } catch (err) {
+              console.error('邮件解析错误:', err);
+              processedCount++;
+              
+              if (processedCount === totalToFetch && !isResolved) {
+                cleanup();
+                emails.sort((a, b) => b.date.getTime() - a.date.getTime());
+                resolve(emails);
+                imap.end();
+              }
+            }
           });
         });
 
