@@ -1,14 +1,70 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import crypto from 'crypto';
 
 // 与 auth routes 保持一致
-const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const SESSION_SECRET = process.env.SESSION_SECRET || 'default-secret-key-change-in-production';
 
 /**
- * 验证会话令牌的有效性
+ * 将十六进制字符串转换为 Uint8Array (Edge Runtime 兼容)
  */
-function validateSessionToken(token: string): boolean {
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
+}
+
+/**
+ * 常量时间比较两个字符串 (Edge Runtime 兼容)
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  
+  return result === 0;
+}
+
+/**
+ * 使用 Web Crypto API 验证 HMAC 签名 (Edge Runtime 兼容)
+ */
+async function verifyHmacSignature(payload: string, signature: string, secret: string): Promise<boolean> {
+  try {
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(secret);
+    
+    // 导入密钥
+    const key = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign', 'verify']
+    );
+    
+    // 计算预期签名
+    const data = encoder.encode(payload);
+    const signatureBuffer = await crypto.subtle.sign('HMAC', key, data);
+    const signatureArray = Array.from(new Uint8Array(signatureBuffer));
+    const expectedSignature = signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    // 常量时间比较
+    return timingSafeEqual(signature, expectedSignature);
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * 验证会话令牌的有效性 (Edge Runtime 兼容)
+ */
+async function validateSessionToken(token: string): Promise<boolean> {
   try {
     const [payloadBase64, signature] = token.split('.');
     
@@ -16,17 +72,16 @@ function validateSessionToken(token: string): boolean {
       return false;
     }
 
-    // 验证签名
-    const hmac = crypto.createHmac('sha256', SESSION_SECRET);
-    hmac.update(Buffer.from(payloadBase64, 'base64').toString());
-    const expectedSignature = hmac.digest('hex');
+    // Base64 解码 payload
+    const payload = atob(payloadBase64);
     
-    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+    // 验证签名
+    const isValidSignature = await verifyHmacSignature(payload, signature, SESSION_SECRET);
+    if (!isValidSignature) {
       return false;
     }
 
     // 解析 payload
-    const payload = Buffer.from(payloadBase64, 'base64').toString();
     const [username, timestamp] = payload.split(':');
     
     if (!username || !timestamp) {
@@ -43,7 +98,7 @@ function validateSessionToken(token: string): boolean {
   }
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const sessionCookie = request.cookies.get('session');
   const isLoginPage = request.nextUrl.pathname === '/login';
   const isApiRoute = request.nextUrl.pathname.startsWith('/api');
@@ -66,7 +121,8 @@ export function middleware(request: NextRequest) {
     }
     
     // 其他 API 路由需要验证会话
-    if (!sessionCookie?.value || !validateSessionToken(sessionCookie.value)) {
+    const isValid = sessionCookie?.value ? await validateSessionToken(sessionCookie.value) : false;
+    if (!isValid) {
       return NextResponse.json(
         { error: 'Unauthorized', message: '请先登录' },
         { status: 401 }
@@ -77,7 +133,7 @@ export function middleware(request: NextRequest) {
   }
 
   // 页面路由处理
-  const isAuthenticated = sessionCookie?.value && validateSessionToken(sessionCookie.value);
+  const isAuthenticated = sessionCookie?.value ? await validateSessionToken(sessionCookie.value) : false;
   const isPortalPage = request.nextUrl.pathname === '/portal';
 
   // 允许未登录用户访问登录页和 Portal 页面
