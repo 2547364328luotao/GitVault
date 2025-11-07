@@ -175,7 +175,14 @@ function fetchEmails(limit: number = 20): Promise<EmailMessage[]> {
 export async function GET() {
   try {
     const emails = await fetchEmails(20);
-    return NextResponse.json(emails);
+    
+    // 禁用所有缓存,确保每次都获取最新邮件
+    const response = NextResponse.json(emails);
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    
+    return response;
   } catch (error) {
     console.error('[API] 获取邮件失败:', error);
     return NextResponse.json(
@@ -187,3 +194,7 @@ export async function GET() {
     );
   }
 }
+
+// 禁用 Next.js 的路由缓存
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
