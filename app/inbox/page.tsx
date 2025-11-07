@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -10,7 +11,15 @@ import { EmailDetail } from '@/components/EmailDetail';
 import { formatRelativeTime } from '@/lib/utils/date';
 
 export default function InboxPage() {
+  const { data: session, status } = useSession();
   const router = useRouter();
+  // 未登录自动跳转到登录页
+  useEffect(() => {
+    if (status === 'loading') return;
+    if (!session) {
+      router.push('/login');
+    }
+  }, [session, status, router]);
   const [emails, setEmails] = useState<EmailMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,8 +83,10 @@ export default function InboxPage() {
   };
 
   useEffect(() => {
-    fetchEmails();
-  }, []);
+    if (session) {
+      fetchEmails();
+    }
+  }, [session]);
 
   return (
     <div className="h-screen bg-white dark:bg-black flex flex-col overflow-hidden">

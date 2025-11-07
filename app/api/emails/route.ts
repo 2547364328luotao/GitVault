@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../auth/[...nextauth]/route';
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 
@@ -172,9 +174,13 @@ function fetchEmails(limit: number = 20): Promise<EmailMessage[]> {
  * GET /api/emails
  * 获取邮箱收件箱邮件列表
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: '未授权,请先登录' }, { status: 401 });
+  }
   try {
-    const emails = await fetchEmails(20);
+  const emails = await fetchEmails(20);
     
     // 禁用所有缓存,确保每次都获取最新邮件
     const response = NextResponse.json(emails);
