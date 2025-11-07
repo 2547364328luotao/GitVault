@@ -1,0 +1,364 @@
+'use client';
+
+import { useState, useMemo } from 'react';
+import { GitHubAccount } from '@/lib/db';
+
+interface AccountListProps {
+  accounts: GitHubAccount[];
+  onEdit: (account: GitHubAccount) => void;
+  onDelete: (id: number) => void;
+}
+
+interface AccessCode {
+  id: number;
+  code: string;
+  expires_at: string | null;
+  used_count: number;
+  max_uses: number;
+  created_at: string;
+}
+
+export default function AccountList({ accounts, onEdit, onDelete }: AccountListProps) {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
+  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'pending' | 'none'>('all');
+  const [loadingCodes, setLoadingCodes] = useState<{ [key: number]: boolean }>({});
+  const [generatedCodes, setGeneratedCodes] = useState<{ [key: number]: AccessCode[] }>({});
+  const [showCodeModal, setShowCodeModal] = useState<number | null>(null);
+
+  const categorizedAccounts = useMemo(() => {
+    return {
+      active: accounts.filter(acc => acc.copilot_pro_status === 'active'),
+      pending: accounts.filter(acc => acc.copilot_pro_status === 'pending'),
+      none: accounts.filter(acc => acc.copilot_pro_status === 'none' || !acc.copilot_pro_status),
+    };
+  }, [accounts]);
+
+  const displayedAccounts = useMemo(() => {
+    if (activeTab === 'all') return accounts;
+    return categorizedAccounts[activeTab];
+  }, [activeTab, accounts, categorizedAccounts]);
+
+  const toggleExpand = (id: number) => {
+    setExpandedId(expandedId === id ? null : id);
+  };
+
+  const togglePassword = (id: number, field: string) => {
+    setShowPasswords(prev => ({
+      ...prev,
+      [`${id}-${field}`]: !prev[`${id}-${field}`]
+    }));
+  };
+
+  const generateAccessCode = async (accountId: number, expiresInDays: number = 7, maxUses: number = 1) => {
+    try {
+      setLoadingCodes(prev => ({ ...prev, [accountId]: true }));
+      const response = await fetch('/api/access-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId, expiresInDays, maxUses })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || '生成失败');
+      }
+
+      const newCode = await response.json();
+      setGeneratedCodes(prev => ({
+        ...prev,
+        [accountId]: [...(prev[accountId] || []), newCode]
+      }));
+      setShowCodeModal(accountId);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '生成卡密失败');
+    } finally {
+      setLoadingCodes(prev => ({ ...prev, [accountId]: false }));
+    }
+  };
+
+  const fetchAccessCodes = async (accountId: number) => {
+    try {
+      const response = await fetch(`/api/access-codes?accountId=${accountId}`);
+      if (response.ok) {
+        const codes = await response.json();
+        setGeneratedCodes(prev => ({ ...prev, [accountId]: codes }));
+      }
+    } catch (error) {
+      console.error('获取卡密失败:', error);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert('已复制到剪贴板!');
+  };
+
+  if (accounts.length === 0) {
+    return (
+      <div className="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl p-12 text-center">
+        <div className="text-6xl mb-4">📭</div>
+        <p className="text-gray-600 dark:text-gray-400">还没有添加任何账号</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Tab Navigation */}
+      <div className="flex gap-2 bg-gray-100 dark:bg-gray-900 p-1 rounded-xl border border-gray-200 dark:border-gray-800">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            activeTab === 'all'
+              ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          全部 ({accounts.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('active')}
+          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            activeTab === 'active'
+              ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          已激活 ({categorizedAccounts.active.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('pending')}
+          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            activeTab === 'pending'
+              ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          申请中 ({categorizedAccounts.pending.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('none')}
+          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            activeTab === 'none'
+              ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          未开通 ({categorizedAccounts.none.length})
+        </button>
+      </div>
+
+      {/* Account Cards */}
+      {displayedAccounts.length === 0 ? (
+        <div className="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl p-12 text-center">
+          <div className="text-4xl mb-4">🔍</div>
+          <p className="text-gray-600 dark:text-gray-400">
+            {activeTab === 'active' && '还没有已激活 Copilot Pro 的账号'}
+            {activeTab === 'pending' && '还没有正在申请 Copilot Pro 的账号'}
+            {activeTab === 'none' && '所有账号都已开通或申请 Copilot Pro'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {displayedAccounts.map((account) => (
+            <div
+              key={account.id}
+              className="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden hover:border-gray-300 dark:hover:border-gray-700 transition-all"
+            >
+              <div
+                className="p-6 cursor-pointer flex justify-between items-center"
+                onClick={() => toggleExpand(account.id!)}
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
+                      {account.github_username}
+                    </h3>
+                    {account.copilot_pro_status === 'active' && (
+                      <span className="inline-flex items-center px-3 py-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-medium rounded-full">
+                        Copilot Pro
+                      </span>
+                    )}
+                    {account.copilot_pro_status === 'pending' && (
+                      <span className="inline-flex items-center px-3 py-1 bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-xs font-medium rounded-full">
+                        申请中
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{account.email}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(account);
+                    }}
+                    className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-white rounded-lg transition-colors border border-gray-300 dark:border-gray-700"
+                  >
+                    编辑
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(account.id!);
+                    }}
+                    className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-800 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 text-gray-900 dark:text-white rounded-lg transition-colors border border-gray-300 dark:border-gray-700 hover:border-red-400 dark:hover:border-red-800"
+                  >
+                    删除
+                  </button>
+                  <svg
+                    className={`w-5 h-5 text-gray-600 dark:text-gray-400 transition-transform ${
+                      expandedId === account.id ? 'rotate-180' : ''
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              {expandedId === account.id && (
+                <div className="px-6 pb-6 space-y-4 border-t border-gray-200 dark:border-gray-800 pt-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-500 mb-1 block">邮箱账号</label>
+                      <p className="text-sm text-gray-900 dark:text-gray-200 break-all">{account.email}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-500 mb-1 block">邮箱密码</label>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-gray-900 dark:text-gray-200 font-mono">
+                          {showPasswords[`${account.id}-email`] ? account.email_password : '••••••••'}
+                        </p>
+                        <button
+                          onClick={() => togglePassword(account.id!, 'email')}
+                          className="text-xs text-purple-500 hover:text-purple-600 dark:text-purple-400 dark:hover:text-purple-300 transition-colors"
+                        >
+                          {showPasswords[`${account.id}-email`] ? '隐藏' : '显示'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {account.email_phone && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-500 mb-1 block">邮箱绑定手机号</label>
+                      <p className="text-sm text-gray-900 dark:text-gray-200">{account.email_phone}</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-500 mb-1 block">GitHub 账号</label>
+                      <p className="text-sm text-gray-900 dark:text-gray-200">{account.github_username}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-500 mb-1 block">GitHub 密码</label>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-gray-900 dark:text-gray-200 font-mono">
+                          {showPasswords[`${account.id}-github`] ? account.github_password : '••••••••'}
+                        </p>
+                        <button
+                          onClick={() => togglePassword(account.id!, 'github')}
+                          className="text-xs text-purple-500 hover:text-purple-600 dark:text-purple-400 dark:hover:text-purple-300 transition-colors"
+                        >
+                          {showPasswords[`${account.id}-github`] ? '隐藏' : '显示'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {account.github_name && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-500 mb-1 block">GitHub Name</label>
+                      <p className="text-sm text-gray-900 dark:text-gray-200">{account.github_name}</p>
+                    </div>
+                  )}
+
+                  {account.github_recovery_codes && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-500 mb-1 block">GitHub Recovery Codes</label>
+                      <pre className="text-xs text-gray-800 dark:text-gray-300 bg-gray-100 dark:bg-gray-900 p-3 rounded-lg mt-1 overflow-x-auto border border-gray-200 dark:border-gray-800">
+                        {account.github_recovery_codes}
+                      </pre>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 p-4 bg-gray-100 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
+                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center text-white">
+                      🤖
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-500 block">GitHub Copilot Pro</label>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">
+                        {account.copilot_pro_status === 'active' && '已激活'}
+                        {account.copilot_pro_status === 'pending' && '申请中'}
+                        {account.copilot_pro_status === 'none' && '未开通'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 生成卡密按钮 - 仅在 Copilot Pro 激活时显示 */}
+                  {account.copilot_pro_status === 'active' && (
+                    <div className="space-y-3">
+                      <button
+                        onClick={() => {
+                          fetchAccessCodes(account.id!);
+                          generateAccessCode(account.id!);
+                        }}
+                        disabled={loadingCodes[account.id!]}
+                        className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-400 disabled:to-gray-400 text-white rounded-xl font-medium transition-all shadow-lg hover:shadow-xl disabled:cursor-not-allowed"
+                      >
+                        {loadingCodes[account.id!] ? '生成中...' : '🎫 生成分享卡密'}
+                      </button>
+
+                      {generatedCodes[account.id!] && generatedCodes[account.id!].length > 0 && (
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-gray-600 dark:text-gray-500 block">已生成的卡密</label>
+                          {generatedCodes[account.id!].map((code) => (
+                            <div
+                              key={code.id}
+                              className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <code className="text-sm font-mono font-bold text-purple-600 dark:text-purple-400">
+                                  {code.code}
+                                </code>
+                                <button
+                                  onClick={() => copyToClipboard(code.code)}
+                                  className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                                >
+                                  复制
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
+                                <span>使用次数: {code.used_count}/{code.max_uses}</span>
+                                {code.expires_at && (
+                                  <span>过期时间: {new Date(code.expires_at).toLocaleDateString('zh-CN')}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                          <p className="text-xs text-gray-500 dark:text-gray-500">
+                            💡 分享此卡密给他人,他们可以在 <a href="/portal" className="text-purple-500 hover:text-purple-600 dark:text-purple-400 dark:hover:text-purple-300 underline" target="_blank">/portal</a> 页面兑换查看账号信息
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="text-xs text-gray-600 dark:text-gray-500 pt-3 border-t border-gray-200 dark:border-gray-800">
+                    创建时间: {account.created_at ? new Date(account.created_at).toLocaleString('zh-CN') : '-'}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
