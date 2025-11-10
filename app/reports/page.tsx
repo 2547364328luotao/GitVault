@@ -433,6 +433,9 @@ export default function ReportsPage() {
               <Link href="/accounts" className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900">
                 账号列表
               </Link>
+              <Link href="/tutorial" className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900">
+                📚 申请教程
+              </Link>
               <Link href="/email-notes" className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900">
                 📝 邮箱备忘
               </Link>

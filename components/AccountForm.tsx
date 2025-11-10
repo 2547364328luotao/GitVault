@@ -19,6 +19,7 @@ export default function AccountForm({ onAccountCreated, editingAccount, onCancel
     github_name: '',
     github_recovery_codes: '',
     github_cookie: '',
+    github_apply_id: '',
     copilot_pro_status: 'none' as 'none' | 'pending' | 'active',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,6 +38,7 @@ export default function AccountForm({ onAccountCreated, editingAccount, onCancel
         github_name: editingAccount.github_name || '',
         github_recovery_codes: editingAccount.github_recovery_codes || '',
         github_cookie: editingAccount.github_cookie || '',
+        github_apply_id: editingAccount.github_apply_id || '',
         copilot_pro_status: editingAccount.copilot_pro_status || 'none',
       });
     }
@@ -71,6 +73,7 @@ export default function AccountForm({ onAccountCreated, editingAccount, onCancel
           github_name: '',
           github_recovery_codes: '',
           github_cookie: '',
+          github_apply_id: '',
           copilot_pro_status: 'none',
         });
         onAccountCreated();
@@ -95,6 +98,7 @@ export default function AccountForm({ onAccountCreated, editingAccount, onCancel
       github_name: '',
       github_recovery_codes: '',
       github_cookie: '',
+      github_apply_id: '',
       copilot_pro_status: 'none',
     });
     onCancelEdit?.();
@@ -124,6 +128,7 @@ export default function AccountForm({ onAccountCreated, editingAccount, onCancel
             github_name: result.data.github_name || '',
             github_recovery_codes: '',
             github_cookie: '',
+            github_apply_id: '',
             copilot_pro_status: 'none',
           });
         } else {
@@ -313,6 +318,25 @@ export default function AccountForm({ onAccountCreated, editingAccount, onCancel
           />
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-600">
             💡 获取方法：登录 GitHub → 按 F12 → Console 标签 → 输入 <code className="bg-gray-100 dark:bg-gray-900 px-1 py-0.5 rounded">document.cookie</code> → 复制结果
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">
+            GitHub 申请ID <span className="text-xs text-gray-500">(用于查询 Education 申请状态)</span>
+          </label>
+          <input
+            type="text"
+            value={formData.github_apply_id}
+            onChange={(e) => setFormData({ ...formData, github_apply_id: e.target.value })}
+            className="w-full px-4 py-3 bg-white dark:bg-black border border-gray-300 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all font-mono text-sm"
+            placeholder="例如: 12345678"
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-600">
+            💡 <strong>如何获取：</strong>访问 <a href="https://github.com/settings/education" target="_blank" rel="noopener noreferrer" className="text-purple-500 hover:text-purple-600 dark:text-purple-400 underline">GitHub Education</a> → 点击你的申请 → 查看 URL 中的数字
+          </p>
+          <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+            📝 URL 示例: github.com/settings/education/developer_pack_applications/<strong className="bg-blue-100 dark:bg-blue-900/30 px-1 rounded">87654321</strong>
           </p>
         </div>
 

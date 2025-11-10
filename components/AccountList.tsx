@@ -130,9 +130,31 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
     }
   };
 
-  const checkEducationStatus = async (accountId: number, githubCookie: string | undefined) => {
-    if (!githubCookie) {
-      alert('该账号未设置 GitHub Cookie，请先编辑账号添加 Cookie');
+  const checkEducationStatus = async (accountId: number, githubCookie: string | undefined, githubApplyId: string | undefined) => {
+    if (!githubApplyId || githubApplyId.trim() === '') {
+      alert(
+        '❌ 该账号未设置 GitHub 申请ID\n\n' +
+        '📋 操作步骤：\n' +
+        '1. 点击【编辑】按钮\n' +
+        '2. 在 GitHub 申请ID 输入框中填写申请ID\n' +
+        '3. 申请ID 从 GitHub Education 页面 URL 获取\n' +
+        '4. 保存后即可查询申请状态\n\n' +
+        '💡 示例：URL 中的数字部分\n' +
+        'https://github.com/settings/education/developer_pack_applications/12345678'
+      );
+      return;
+    }
+
+    if (!githubCookie || githubCookie.trim() === '') {
+      alert(
+        '❌ 该账号未设置 GitHub Cookie\n\n' +
+        '📋 操作步骤：\n' +
+        '1. 点击【编辑】按钮\n' +
+        '2. 在 GitHub Cookie 输入框中粘贴您的 Cookie\n' +
+        '3. 点击输入框旁边的【如何获取？】查看详细教程\n' +
+        '4. 保存后即可查询申请状态\n\n' +
+        '💡 提示：Cookie 等同于登录凭证，是查询申请状态的必需信息'
+      );
       return;
     }
 
@@ -141,7 +163,7 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
       const response = await fetch('/api/check-education', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cookie: githubCookie })
+        body: JSON.stringify({ applyId: githubApplyId, cookie: githubCookie })
       });
 
       if (!response.ok) {
@@ -155,6 +177,15 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
 
       const result = await response.json();
       setEducationStatus(prev => ({ ...prev, [accountId]: result }));
+      
+      // 查询成功后显示友好提示
+      if (result.status === 'Approved') {
+        alert('✅ 查询成功！申请已通过，可以将状态更新为【已激活】了！');
+      } else if (result.status === 'Denied') {
+        alert('❌ 查询成功：申请被拒绝，建议检查申请信息或重新申请');
+      } else {
+        alert('⏳ 查询成功：申请正在审核中，请耐心等待');
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '查询 Education 状态失败';
       // 使用多行提示框
@@ -167,7 +198,18 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
           '3. 防火墙限制\n\n' +
           '解决方法：\n' +
           '→ 查看项目根目录的 PROXY_SETUP.md 文件\n' +
-          '→ 在 .env.local 中配置代理（HTTP_PROXY）'
+          '→ 在 .env.local 中配置代理（PROXY_URL）\n' +
+          '→ 当前配置：' + (process.env.PROXY_URL || '未配置')
+        );
+      } else if (errorMessage.includes('Cookie 无效')) {
+        alert(
+          '❌ ' + errorMessage + '\n\n' +
+          '📋 解决方法：\n' +
+          '1. 在浏览器中访问 GitHub 并登录\n' +
+          '2. 按 F12 打开开发者工具\n' +
+          '3. 在 Console 中输入：copy(document.cookie)\n' +
+          '4. 编辑账号，将新的 Cookie 粘贴到输入框\n' +
+          '5. 保存后重新查询'
         );
       } else {
         alert(errorMessage);
@@ -191,6 +233,22 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
     <div className="space-y-6">
       {/* Tab Navigation */}
       <div className="space-y-3">
+        {/* 使用说明提示 */}
+        <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-3 flex items-center gap-3">
+          <div className="text-2xl">💡</div>
+          <div className="flex-1 text-sm text-blue-700 dark:text-blue-300">
+            <strong>查询申请状态：</strong>需要先将账号状态设为【申请中】并添加 GitHub Cookie
+          </div>
+          <a
+            href="https://github.com/2547364328luotao/GitVault/blob/master/HOW_TO_CHECK_EDUCATION_STATUS.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded-lg font-medium transition-colors whitespace-nowrap"
+          >
+            📖 查看教程
+          </a>
+        </div>
+        
         {/* 主标签页 */}
         <div className="flex gap-2 bg-gray-100 dark:bg-gray-900 p-1 rounded-xl border border-gray-200 dark:border-gray-800">
           <button
@@ -453,17 +511,25 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
                       </p>
                     </div>
                     {account.copilot_pro_status === 'pending' && (
-                      <button
-                        onClick={() => checkEducationStatus(account.id!, account.github_cookie)}
-                        disabled={checkingEducation[account.id!]}
-                        className="px-4 py-2 text-sm bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 disabled:from-gray-400 disabled:to-gray-400 text-white rounded-lg font-medium transition-all shadow-md hover:shadow-lg disabled:cursor-not-allowed whitespace-nowrap"
-                      >
-                        {checkingEducation[account.id!] ? '查询中...' : '🔍 查询申请状态'}
-                      </button>
+                      <div className="flex flex-col gap-2">
+                        <button
+                          onClick={() => checkEducationStatus(account.id!, account.github_cookie, account.github_apply_id)}
+                          disabled={checkingEducation[account.id!] || !account.github_cookie || !account.github_apply_id}
+                          className="px-4 py-2 text-sm bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 disabled:from-gray-400 disabled:to-gray-400 text-white rounded-lg font-medium transition-all shadow-md hover:shadow-lg disabled:cursor-not-allowed whitespace-nowrap"
+                          title={!account.github_cookie ? '请先编辑账号添加 GitHub Cookie' : !account.github_apply_id ? '请先编辑账号添加 GitHub 申请ID' : ''}
+                        >
+                          {checkingEducation[account.id!] ? '查询中...' : '🔍 查询申请状态'}
+                        </button>
+                        {(!account.github_cookie || !account.github_apply_id) && (
+                          <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                            ⚠️ {!account.github_apply_id && !account.github_cookie ? '未设置 Apply ID 和 Cookie' : !account.github_apply_id ? '未设置 Apply ID' : '未设置 Cookie'}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
 
-                  {/* Education 申请状态显示 */}
+                  {/* Education 申请状态显示区域 */}
                   {account.copilot_pro_status === 'pending' && educationStatus[account.id!] && (
                     <div className={`p-4 rounded-xl border ${
                       educationStatus[account.id!].status === 'Approved' 
@@ -511,6 +577,18 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
                             <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 italic">
                               💬 {educationStatus[account.id!].message}
                             </p>
+                          )}
+                          {educationStatus[account.id!].status === 'Approved' && (
+                            <div className="mt-3 p-2 bg-white dark:bg-gray-800 rounded-lg border border-green-300 dark:border-green-700">
+                              <p className="text-xs text-green-700 dark:text-green-300 font-medium">
+                                🎉 恭喜！申请已通过，请：
+                              </p>
+                              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                1. 点击【编辑】按钮<br/>
+                                2. 将状态改为【已激活】<br/>
+                                3. 保存后即可生成分享卡密
+                              </p>
+                            </div>
                           )}
                         </div>
                       </div>

@@ -7,6 +7,7 @@ GitVault 是一个安全的 GitHub 账号密码备忘录系统，使用 Next.js 
 - ✅ **安全认证系统**: 基于会话令牌的身份验证
 - ✅ **加密保护**: HMAC-SHA256 签名,防止令牌伪造
 - ✅ 安全存储 GitHub 账号信息
+- ✅ **GitHub 教育查询**: 实时查询 GitHub 学生认证申请状态
 - ✅ 管理邮箱账号和密码
 - ✅ 存储 GitHub 恢复代码
 - ✅ 卡密系统:生成和管理访问卡密
@@ -26,6 +27,8 @@ GitVault 是一个安全的 GitHub 账号密码备忘录系统，使用 Next.js 
 - 🔒 GitHub 密码
 - 🏷️ GitHub Name
 - 🔐 GitHub Recovery Codes
+- 🍪 GitHub Cookie (用于教育查询)
+- 📝 教育申请状态 (pending/approved/rejected)
 
 ## 技术栈
 
@@ -58,6 +61,9 @@ ADMIN_PASSWORD=your_strong_password_here
 # 会话密钥 (生成方法见下方)
 SESSION_SECRET=your_random_session_secret
 
+# 代理配置 (可选，针对中国大陆用户访问 GitHub)
+PROXY_URL=http://127.0.0.1:7890  # 或 socks5://127.0.0.1:10808
+
 # IMAP 邮件配置
 IMAP_USER=your_email@example.com
 IMAP_PASSWORD=your_imap_password
@@ -75,7 +81,18 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 - 不要将 `.env.local` 提交到 Git
 - 生产环境在 Vercel 控制台配置环境变量
 
-### 3. 运行开发服务器
+### 3. 配置代理 (可选，针对中国大陆用户)
+
+如需使用 GitHub 教育查询功能，请配置代理：
+
+```bash
+# 添加到 .env.local
+PROXY_URL=http://127.0.0.1:7890  # 或 socks5://127.0.0.1:10808
+```
+
+详细配置请查看 [PROXY_TROUBLESHOOTING.md](./PROXY_TROUBLESHOOTING.md)
+
+### 4. 运行开发服务器
 
 ```bash
 npm run dev
@@ -83,7 +100,21 @@ npm run dev
 
 在浏览器中打开 [http://localhost:3000](http://localhost:3000) 查看应用。
 
-### 4. 构建生产版本
+### 4. 测试功能
+
+在开发前，建议先测试代理和关键功能：
+
+```bash
+# 测试代理连接
+node test-proxy.js
+
+# 测试 GitHub 教育查询功能
+node test-education-query.js
+```
+
+详细测试说明请查看 [TESTING.md](./TESTING.md)
+
+### 5. 构建生产版本
 
 ```bash
 npm run build
@@ -119,6 +150,11 @@ POST /api/access-codes/verify  # 验证卡密 (公开访问)
 GET /api/emails  # 获取邮件列表
 ```
 
+### GitHub 教育查询 API (需要认证)
+```
+POST /api/check-education  # 查询教育申请状态
+```
+
 ## 数据库结构
 
 ```sql
@@ -131,6 +167,8 @@ CREATE TABLE github_accounts (
   github_password VARCHAR(255) NOT NULL,
   github_name VARCHAR(255),
   github_recovery_codes TEXT,
+  github_cookie TEXT,
+  education_status VARCHAR(50),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -246,6 +284,7 @@ IMAP_PORT=993
 - [x] 中间件路由保护 ✅
 - [x] 卡密系统 ✅
 - [x] 邮件收件箱 ✅
+- [x] GitHub 教育查询功能 ✅
 - [ ] 数据加密存储
 - [ ] 导出/导入功能
 - [ ] 搜索和过滤功能

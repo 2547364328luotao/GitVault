@@ -13,6 +13,7 @@ export interface GitHubAccount {
   github_name?: string;
   github_recovery_codes?: string;
   github_cookie?: string;
+  github_apply_id?: string;
   copilot_pro_status?: CopilotProStatus;
   sale_status?: SaleStatus;
   created_at?: Date;
@@ -92,6 +93,7 @@ export async function createAccount(account: Omit<GitHubAccount, 'id' | 'created
       github_name, 
       github_recovery_codes,
       github_cookie,
+      github_apply_id,
       copilot_pro_status,
       sale_status
     )
@@ -104,6 +106,7 @@ export async function createAccount(account: Omit<GitHubAccount, 'id' | 'created
       ${account.github_name || null},
       ${account.github_recovery_codes || null},
       ${account.github_cookie || null},
+      ${account.github_apply_id || null},
       ${account.copilot_pro_status || 'none'},
       ${account.sale_status || 'available'}
     )
@@ -118,16 +121,17 @@ export async function updateAccount(id: number, account: Partial<GitHubAccount>)
   const result = await sql`
     UPDATE github_accounts 
     SET 
-      email = COALESCE(${account.email}, email),
-      email_password = COALESCE(${account.email_password}, email_password),
-      email_phone = COALESCE(${account.email_phone}, email_phone),
-      github_username = COALESCE(${account.github_username}, github_username),
-      github_password = COALESCE(${account.github_password}, github_password),
-      github_name = COALESCE(${account.github_name}, github_name),
-      github_recovery_codes = COALESCE(${account.github_recovery_codes}, github_recovery_codes),
-      github_cookie = COALESCE(${account.github_cookie}, github_cookie),
-      copilot_pro_status = COALESCE(${account.copilot_pro_status}, copilot_pro_status),
-      sale_status = COALESCE(${account.sale_status}, sale_status),
+      email = COALESCE(${account.email || null}, email),
+      email_password = COALESCE(${account.email_password || null}, email_password),
+      email_phone = COALESCE(${account.email_phone || null}, email_phone),
+      github_username = COALESCE(${account.github_username || null}, github_username),
+      github_password = COALESCE(${account.github_password || null}, github_password),
+      github_name = COALESCE(${account.github_name || null}, github_name),
+      github_recovery_codes = COALESCE(${account.github_recovery_codes || null}, github_recovery_codes),
+      github_cookie = COALESCE(${account.github_cookie || null}, github_cookie),
+      github_apply_id = COALESCE(${account.github_apply_id || null}, github_apply_id),
+      copilot_pro_status = COALESCE(${account.copilot_pro_status || null}, copilot_pro_status),
+      sale_status = COALESCE(${account.sale_status || null}, sale_status),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ${id}
     RETURNING *

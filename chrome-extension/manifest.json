@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "GitHub Cookie Helper",
+  "version": "1.0.0",
+  "description": "一键获取 GitHub Cookie 和 Apply ID，用于 GitVault 系统",
+  "permissions": [
+    "cookies",
+    "clipboardWrite",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://github.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.svg",
+      "48": "icon.svg",
+      "128": "icon.svg"
+    }
+  },
+  "icons": {
+    "16": "icon.svg",
+    "48": "icon.svg",
+    "128": "icon.svg"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/settings/education/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

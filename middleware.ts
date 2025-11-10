@@ -107,7 +107,8 @@ export async function middleware(request: NextRequest) {
   const publicApiRoutes = [
     '/api/auth/login', 
     '/api/auth/check',
-    '/api/access-codes/verify' // 卡密验证 API 公开访问
+    '/api/access-codes/verify', // 卡密验证 API 公开访问
+    '/api/check-education' // GitHub Education 查询 API（使用自己的 Cookie 认证）
   ];
   const isPublicApiRoute = publicApiRoutes.some(route => 
     request.nextUrl.pathname === route
