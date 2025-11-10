@@ -22,9 +22,12 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'pending' | 'none'>('all');
+  const [saleFilter, setSaleFilter] = useState<'all' | 'available' | 'sold'>('all');
   const [loadingCodes, setLoadingCodes] = useState<{ [key: number]: boolean }>({});
   const [generatedCodes, setGeneratedCodes] = useState<{ [key: number]: AccessCode[] }>({});
   const [showCodeModal, setShowCodeModal] = useState<number | null>(null);
+  const [checkingEducation, setCheckingEducation] = useState<{ [key: number]: boolean }>({});
+  const [educationStatus, setEducationStatus] = useState<{ [key: number]: any }>({});
 
   const categorizedAccounts = useMemo(() => {
     return {
@@ -36,8 +39,21 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
 
   const displayedAccounts = useMemo(() => {
     if (activeTab === 'all') return accounts;
-    return categorizedAccounts[activeTab];
-  }, [activeTab, accounts, categorizedAccounts]);
+    
+    let filtered = categorizedAccounts[activeTab as keyof typeof categorizedAccounts];
+    
+    // 如果在 "已激活" 标签下，应用销售状态筛选
+    if (activeTab === 'active' && saleFilter !== 'all') {
+      filtered = filtered.filter(acc => {
+        if (saleFilter === 'available') {
+          return acc.sale_status === 'available' || !acc.sale_status;
+        }
+        return acc.sale_status === 'sold';
+      });
+    }
+    
+    return filtered;
+  }, [activeTab, saleFilter, accounts, categorizedAccounts]);
 
   const toggleExpand = (id: number) => {
     setExpandedId(expandedId === id ? null : id);
@@ -94,6 +110,74 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
     alert('已复制到剪贴板!');
   };
 
+  const toggleSaleStatus = async (accountId: number, currentStatus: string | undefined) => {
+    const newStatus = currentStatus === 'sold' ? 'available' : 'sold';
+    try {
+      const response = await fetch(`/api/accounts/${accountId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sale_status: newStatus })
+      });
+
+      if (!response.ok) {
+        throw new Error('更新失败');
+      }
+
+      // 刷新页面以显示更新
+      window.location.reload();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '更新销售状态失败');
+    }
+  };
+
+  const checkEducationStatus = async (accountId: number, githubCookie: string | undefined) => {
+    if (!githubCookie) {
+      alert('该账号未设置 GitHub Cookie，请先编辑账号添加 Cookie');
+      return;
+    }
+
+    try {
+      setCheckingEducation(prev => ({ ...prev, [accountId]: true }));
+      const response = await fetch('/api/check-education', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookie: githubCookie })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        let errorMsg = error.error || '查询失败';
+        if (error.tip) {
+          errorMsg += '\n\n💡 提示：' + error.tip;
+        }
+        throw new Error(errorMsg);
+      }
+
+      const result = await response.json();
+      setEducationStatus(prev => ({ ...prev, [accountId]: result }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '查询 Education 状态失败';
+      // 使用多行提示框
+      if (errorMessage.includes('无法连接到 GitHub')) {
+        alert(
+          '❌ ' + errorMessage + '\n\n' +
+          '这可能是因为：\n' +
+          '1. 网络无法访问 GitHub\n' +
+          '2. 需要配置代理（中国大陆用户）\n' +
+          '3. 防火墙限制\n\n' +
+          '解决方法：\n' +
+          '→ 查看项目根目录的 PROXY_SETUP.md 文件\n' +
+          '→ 在 .env.local 中配置代理（HTTP_PROXY）'
+        );
+      } else {
+        alert(errorMessage);
+      }
+      setEducationStatus(prev => ({ ...prev, [accountId]: null }));
+    } finally {
+      setCheckingEducation(prev => ({ ...prev, [accountId]: false }));
+    }
+  };
+
   if (accounts.length === 0) {
     return (
       <div className="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl p-12 text-center">
@@ -106,47 +190,98 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
-      <div className="flex gap-2 bg-gray-100 dark:bg-gray-900 p-1 rounded-xl border border-gray-200 dark:border-gray-800">
-        <button
-          onClick={() => setActiveTab('all')}
-          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-            activeTab === 'all'
-              ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-          }`}
-        >
-          全部 ({accounts.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('active')}
-          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-            activeTab === 'active'
-              ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-          }`}
-        >
-          已激活 ({categorizedAccounts.active.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('pending')}
-          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-            activeTab === 'pending'
-              ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-          }`}
-        >
-          申请中 ({categorizedAccounts.pending.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('none')}
-          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-            activeTab === 'none'
-              ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-          }`}
-        >
-          未开通 ({categorizedAccounts.none.length})
-        </button>
+      <div className="space-y-3">
+        {/* 主标签页 */}
+        <div className="flex gap-2 bg-gray-100 dark:bg-gray-900 p-1 rounded-xl border border-gray-200 dark:border-gray-800">
+          <button
+            onClick={() => {
+              setActiveTab('all');
+              setSaleFilter('all');
+            }}
+            className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'all'
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            全部 ({accounts.length})
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('active');
+              setSaleFilter('all');
+            }}
+            className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'active'
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            已激活 ({categorizedAccounts.active.length})
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('pending');
+              setSaleFilter('all');
+            }}
+            className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'pending'
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            申请中 ({categorizedAccounts.pending.length})
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('none');
+              setSaleFilter('all');
+            }}
+            className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'none'
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            未开通 ({categorizedAccounts.none.length})
+          </button>
+        </div>
+
+        {/* 已激活的二级筛选 - 销售状态 */}
+        {activeTab === 'active' && (
+          <div className="flex gap-2 bg-purple-50 dark:bg-purple-950/30 p-1 rounded-xl border border-purple-200 dark:border-purple-800">
+            <button
+              onClick={() => setSaleFilter('all')}
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                saleFilter === 'all'
+                  ? 'bg-white dark:bg-purple-900 text-gray-900 dark:text-white shadow-lg'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              全部 ({categorizedAccounts.active.length})
+            </button>
+            <button
+              onClick={() => setSaleFilter('available')}
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                saleFilter === 'available'
+                  ? 'bg-white dark:bg-purple-900 text-gray-900 dark:text-white shadow-lg'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              💰 可售 ({categorizedAccounts.active.filter(acc => acc.sale_status === 'available' || !acc.sale_status).length})
+            </button>
+            <button
+              onClick={() => setSaleFilter('sold')}
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                saleFilter === 'sold'
+                  ? 'bg-white dark:bg-purple-900 text-gray-900 dark:text-white shadow-lg'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              🔒 已出售 ({categorizedAccounts.active.filter(acc => acc.sale_status === 'sold').length})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Account Cards */}
@@ -154,7 +289,9 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
         <div className="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl p-12 text-center">
           <div className="text-4xl mb-4">🔍</div>
           <p className="text-gray-600 dark:text-gray-400">
-            {activeTab === 'active' && '还没有已激活 Copilot Pro 的账号'}
+            {activeTab === 'active' && saleFilter === 'all' && '还没有已激活 Copilot Pro 的账号'}
+            {activeTab === 'active' && saleFilter === 'available' && '还没有可售的已激活账号'}
+            {activeTab === 'active' && saleFilter === 'sold' && '还没有已出售的账号'}
             {activeTab === 'pending' && '还没有正在申请 Copilot Pro 的账号'}
             {activeTab === 'none' && '所有账号都已开通或申请 Copilot Pro'}
           </p>
@@ -175,6 +312,11 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
                     <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
                       {account.github_username}
                     </h3>
+                    {account.copilot_pro_status === 'active' && account.sale_status === 'sold' && (
+                      <span className="inline-flex items-center px-3 py-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white text-xs font-medium rounded-full">
+                        已出售
+                      </span>
+                    )}
                     {account.copilot_pro_status === 'active' && (
                       <span className="inline-flex items-center px-3 py-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-medium rounded-full">
                         Copilot Pro
@@ -186,7 +328,18 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{account.email}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{account.email}</p>
+                  {account.created_at && (
+                    <p className="text-xs text-gray-500 dark:text-gray-600">
+                      📅 {new Date(account.created_at).toLocaleString('zh-CN', { 
+                        year: 'numeric', 
+                        month: '2-digit', 
+                        day: '2-digit', 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                      })}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -291,7 +444,7 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
                     <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center text-white">
                       🤖
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <label className="text-xs font-medium text-gray-600 dark:text-gray-500 block">GitHub Copilot Pro</label>
                       <p className="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">
                         {account.copilot_pro_status === 'active' && '已激活'}
@@ -299,7 +452,101 @@ export default function AccountList({ accounts, onEdit, onDelete }: AccountListP
                         {account.copilot_pro_status === 'none' && '未开通'}
                       </p>
                     </div>
+                    {account.copilot_pro_status === 'pending' && (
+                      <button
+                        onClick={() => checkEducationStatus(account.id!, account.github_cookie)}
+                        disabled={checkingEducation[account.id!]}
+                        className="px-4 py-2 text-sm bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 disabled:from-gray-400 disabled:to-gray-400 text-white rounded-lg font-medium transition-all shadow-md hover:shadow-lg disabled:cursor-not-allowed whitespace-nowrap"
+                      >
+                        {checkingEducation[account.id!] ? '查询中...' : '🔍 查询申请状态'}
+                      </button>
+                    )}
                   </div>
+
+                  {/* Education 申请状态显示 */}
+                  {account.copilot_pro_status === 'pending' && educationStatus[account.id!] && (
+                    <div className={`p-4 rounded-xl border ${
+                      educationStatus[account.id!].status === 'Approved' 
+                        ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800'
+                        : educationStatus[account.id!].status === 'Denied'
+                        ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800'
+                        : 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800'
+                    }`}>
+                      <div className="flex items-start gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-2xl ${
+                          educationStatus[account.id!].status === 'Approved'
+                            ? 'bg-green-500'
+                            : educationStatus[account.id!].status === 'Denied'
+                            ? 'bg-red-500'
+                            : 'bg-yellow-500'
+                        }`}>
+                          {educationStatus[account.id!].status === 'Approved' ? '✅' : educationStatus[account.id!].status === 'Denied' ? '❌' : '⏳'}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className={`text-sm font-semibold mb-2 ${
+                            educationStatus[account.id!].status === 'Approved'
+                              ? 'text-green-900 dark:text-green-100'
+                              : educationStatus[account.id!].status === 'Denied'
+                              ? 'text-red-900 dark:text-red-100'
+                              : 'text-yellow-900 dark:text-yellow-100'
+                          }`}>
+                            申请状态: {educationStatus[account.id!].status}
+                          </h4>
+                          {educationStatus[account.id!].school_name && (
+                            <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">
+                              🏫 学校: {educationStatus[account.id!].school_name}
+                            </p>
+                          )}
+                          {educationStatus[account.id!].school_type && (
+                            <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">
+                              📚 类型: {educationStatus[account.id!].school_type}
+                            </p>
+                          )}
+                          {educationStatus[account.id!].submitted_at && (
+                            <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">
+                              📅 提交时间: {educationStatus[account.id!].submitted_at}
+                            </p>
+                          )}
+                          {educationStatus[account.id!].message && (
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 italic">
+                              💬 {educationStatus[account.id!].message}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 销售状态切换 - 仅在 Copilot Pro 激活时显示 */}
+                  {account.copilot_pro_status === 'active' && (
+                    <div className="flex items-center justify-between p-4 bg-gray-100 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white ${
+                          account.sale_status === 'sold' 
+                            ? 'bg-gradient-to-br from-gray-500 to-gray-600' 
+                            : 'bg-gradient-to-br from-green-500 to-emerald-500'
+                        }`}>
+                          {account.sale_status === 'sold' ? '🔒' : '💰'}
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 dark:text-gray-500 block">销售状态</label>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">
+                            {account.sale_status === 'sold' ? '已出售' : '可售'}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => toggleSaleStatus(account.id!, account.sale_status)}
+                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                          account.sale_status === 'sold'
+                            ? 'bg-green-500 hover:bg-green-600 text-white'
+                            : 'bg-gray-500 hover:bg-gray-600 text-white'
+                        }`}
+                      >
+                        {account.sale_status === 'sold' ? '标记为可售' : '标记为已售'}
+                      </button>
+                    </div>
+                  )}
 
                   {/* 生成卡密按钮 - 仅在 Copilot Pro 激活时显示 */}
                   {account.copilot_pro_status === 'active' && (

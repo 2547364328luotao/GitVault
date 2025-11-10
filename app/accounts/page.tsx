@@ -71,6 +71,44 @@ export default function AccountsPage() {
     }
   };
 
+  const handleBackup = () => {
+    if (accounts.length === 0) {
+      alert('暂无数据可备份');
+      return;
+    }
+
+    // 创建备份数据
+    const backupData = {
+      timestamp: new Date().toISOString(),
+      version: '1.0',
+      total: accounts.length,
+      accounts: accounts,
+    };
+
+    // 转换为 JSON 字符串
+    const jsonString = JSON.stringify(backupData, null, 2);
+    
+    // 创建 Blob 对象
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    
+    // 创建下载链接
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // 生成文件名：gitvault-backup-2025-11-09-14-30-00.json
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('.')[0];
+    link.download = `gitvault-backup-${timestamp}.json`;
+    
+    // 触发下载
+    document.body.appendChild(link);
+    link.click();
+    
+    // 清理
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="h-screen bg-white dark:bg-black flex flex-col overflow-hidden">
       {/* Header */}
@@ -95,6 +133,18 @@ export default function AccountsPage() {
                 账号列表
               </Link>
               <Link 
+                href="/email-notes"
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900"
+              >
+                📝 邮箱备忘
+              </Link>
+              <Link 
+                href="/reports"
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900"
+              >
+                🎓 认证报告
+              </Link>
+              <Link 
                 href="/inbox"
                 className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900"
               >
@@ -117,13 +167,25 @@ export default function AccountsPage() {
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto scrollbar-custom">
         <div className="max-w-7xl mx-auto px-6 py-12">
-          <div className="mb-12">
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-              账号列表
-            </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-400">
-              查看和管理所有 GitHub 账号
-            </p>
+          <div className="mb-12 flex justify-between items-start">
+            <div>
+              <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
+                账号列表
+              </h2>
+              <p className="text-lg text-gray-600 dark:text-gray-400">
+                查看和管理所有 GitHub 账号
+              </p>
+            </div>
+            <button
+              onClick={handleBackup}
+              disabled={accounts.length === 0}
+              className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:from-gray-400 disabled:to-gray-400 text-white rounded-xl font-medium transition-all shadow-lg hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+              </svg>
+              备份数据
+            </button>
           </div>
 
           {isLoading ? (

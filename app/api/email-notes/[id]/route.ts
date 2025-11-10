@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAccountById, updateAccount, deleteAccount } from '@/lib/db';
+import { getEmailNoteById, updateEmailNote, deleteEmailNote } from '@/lib/db';
 
 export async function GET(
   request: NextRequest,
@@ -7,20 +7,20 @@ export async function GET(
 ) {
   try {
     const id = parseInt(params.id);
-    const account = await getAccountById(id);
+    const note = await getEmailNoteById(id);
     
-    if (!account) {
+    if (!note) {
       return NextResponse.json(
-        { error: 'Account not found' },
+        { error: 'Email note not found' },
         { status: 404 }
       );
     }
     
-    return NextResponse.json(account);
+    return NextResponse.json(note);
   } catch (error) {
-    console.error('Failed to fetch account:', error);
+    console.error('Failed to fetch email note:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch account' },
+      { error: 'Failed to fetch email note' },
       { status: 500 }
     );
   }
@@ -34,26 +34,25 @@ export async function PUT(
     const id = parseInt(params.id);
     const body = await request.json();
     
-    const updatedAccount = await updateAccount(id, body);
+    const updatedNote = await updateEmailNote(id, body);
     
-    if (!updatedAccount) {
+    if (!updatedNote) {
       return NextResponse.json(
-        { error: 'Account not found' },
+        { error: 'Email note not found' },
         { status: 404 }
       );
     }
     
-    return NextResponse.json(updatedAccount);
+    return NextResponse.json(updatedNote);
   } catch (error) {
-    console.error('Failed to update account:', error);
+    console.error('Failed to update email note:', error);
     return NextResponse.json(
-      { error: 'Failed to update account' },
+      { error: 'Failed to update email note' },
       { status: 500 }
     );
   }
 }
 
-// PATCH 方法用于部分更新（例如更新销售状态）
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -62,20 +61,20 @@ export async function PATCH(
     const id = parseInt(params.id);
     const body = await request.json();
     
-    const updatedAccount = await updateAccount(id, body);
+    const updatedNote = await updateEmailNote(id, body);
     
-    if (!updatedAccount) {
+    if (!updatedNote) {
       return NextResponse.json(
-        { error: 'Account not found' },
+        { error: 'Email note not found' },
         { status: 404 }
       );
     }
     
-    return NextResponse.json(updatedAccount);
+    return NextResponse.json(updatedNote);
   } catch (error) {
-    console.error('Failed to update account:', error);
+    console.error('Failed to update email note:', error);
     return NextResponse.json(
-      { error: 'Failed to update account' },
+      { error: 'Failed to update email note' },
       { status: 500 }
     );
   }
@@ -87,20 +86,20 @@ export async function DELETE(
 ) {
   try {
     const id = parseInt(params.id);
-    const success = await deleteAccount(id);
+    const success = await deleteEmailNote(id);
     
     if (!success) {
       return NextResponse.json(
-        { error: 'Account not found' },
+        { error: 'Email note not found' },
         { status: 404 }
       );
     }
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Failed to delete account:', error);
+    console.error('Failed to delete email note:', error);
     return NextResponse.json(
-      { error: 'Failed to delete account' },
+      { error: 'Failed to delete email note' },
       { status: 500 }
     );
   }
